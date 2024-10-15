@@ -3,6 +3,7 @@ package cachet.plugins.health
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.health.connect.datatypes.Metadata.RECORDING_METHOD_MANUAL_ENTRY
 import android.net.Uri
 import android.os.Handler
 import android.util.Log
@@ -149,6 +150,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
             "requestAuthorization" -> requestAuthorization(call, result)
             "revokePermissions" -> revokePermissions(call, result)
             "getData" -> getData(call, result)
+            "getAggregateData" -> getData(call, result)
             "getIntervalData" -> getIntervalData(call, result)
             "writeData" -> writeData(call, result)
             "delete" -> deleteData(call, result)
@@ -668,6 +670,243 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
         mResult = result
         healthConnectRequestPermissionsLauncher!!.launch(permList.toSet())
     }
+    private fun getAggregateData(call: MethodCall, result: Result) {
+        val dataType = call.argument<String>("dataTypeKey")!!
+        val startTime = Instant.ofEpochMilli(call.argument<Long>("startTime")!!)
+        val endTime = Instant.ofEpochMilli(call.argument<Long>("endTime")!!)
+        val healthConnectData = mutableListOf<Map<String, Any?>>()
+        val recordingMethodsToFilter = call.argument<List<Int>>("recordingMethodsToFilter")!!
+
+        Log.i(
+            "FLUTTER_HEALTH",
+            "Getting data for $dataType between $startTime and $endTime, filtering by $recordingMethodsToFilter"
+        )
+
+        scope.launch {
+            try {
+                mapToType[dataType]?.let { classType ->
+                    val records = mutableListOf<Record>()
+
+                    // Set up the initial request to read health records with specified
+                    // parameters
+                    var request =
+                        ReadRecordsRequest(
+                            recordType = classType,
+                            // Define the maximum amount of data
+                            // that HealthConnect can return
+                            // in a single request
+                            timeRangeFilter =
+                            TimeRangeFilter.between(
+                                startTime,
+                                endTime
+                            ),
+                        )
+
+                    var response = healthConnectClient.read(request)
+                    var pageToken = response.pageToken
+
+                    // Add the records from the initial response to the records list
+                    records.addAll(response.records)
+
+                    // Continue making requests and fetching records while there is a
+                    // page token
+                    while (!pageToken.isNullOrEmpty()) {
+                        request =
+                            ReadRecordsRequest(
+                                recordType = classType,
+                                timeRangeFilter =
+                                TimeRangeFilter.between(
+                                    startTime,
+                                    endTime
+                                ),
+                                pageToken = pageToken
+                            )
+                        response = healthConnectClient.readRecords(request)
+
+                        pageToken = response.pageToken
+                        records.addAll(response.records)
+                    }
+
+                    // Workout needs distance and total calories burned too
+                    if (dataType == WORKOUT) {
+                        var filteredRecords = filterRecordsByRecordingMethods(
+                            recordingMethodsToFilter,
+                            records
+                        )
+
+                        for (rec in filteredRecords) {
+                            val record = rec as ExerciseSessionRecord
+                            val distanceRequest =
+                                healthConnectClient.readRecords(
+                                    ReadRecordsRequest(
+                                        recordType =
+                                        DistanceRecord::class,
+                                        timeRangeFilter =
+                                        TimeRangeFilter.between(
+                                            record.startTime,
+                                            record.endTime,
+                                        ),
+                                    ),
+                                )
+                            var totalDistance = 0.0
+                            for (distanceRec in distanceRequest.records) {
+                                totalDistance +=
+                                    distanceRec.distance
+                                        .inMeters
+                            }
+
+                            val energyBurnedRequest =
+                                healthConnectClient.readRecords(
+                                    ReadRecordsRequest(
+                                        recordType =
+                                        TotalCaloriesBurnedRecord::class,
+                                        timeRangeFilter =
+                                        TimeRangeFilter.between(
+                                            record.startTime,
+                                            record.endTime,
+                                        ),
+                                    ),
+                                )
+                            var totalEnergyBurned = 0.0
+                            for (energyBurnedRec in
+                            energyBurnedRequest.records) {
+                                totalEnergyBurned +=
+                                    energyBurnedRec.energy
+                                        .inKilocalories
+                            }
+
+                            val stepRequest =
+                                healthConnectClient.readRecords(
+                                    ReadRecordsRequest(
+                                        recordType =
+                                        StepsRecord::class,
+                                        timeRangeFilter =
+                                        TimeRangeFilter.between(
+                                            record.startTime,
+                                            record.endTime
+                                        ),
+                                    ),
+                                )
+                            var totalSteps = 0.0
+                            for (stepRec in stepRequest.records) {
+                                totalSteps += stepRec.count
+                            }
+
+                            // val metadata = (rec as Record).metadata
+                            // Add final datapoint
+                            healthConnectData.add(
+                                // mapOf(
+                                mapOf<String, Any?>(
+                                    "uuid" to record.metadata.id,
+                                    "workoutActivityType" to
+                                            (workoutTypeMap
+                                                .filterValues {
+                                                    it ==
+                                                            record.exerciseType
+                                                }
+                                                .keys
+                                                .firstOrNull()
+                                                ?: "OTHER"),
+                                    "totalDistance" to
+                                            if (totalDistance ==
+                                                0.0
+                                            )
+                                                null
+                                            else
+                                                totalDistance,
+                                    "totalDistanceUnit" to
+                                            "METER",
+                                    "totalEnergyBurned" to
+                                            if (totalEnergyBurned ==
+                                                0.0
+                                            )
+                                                null
+                                            else
+                                                totalEnergyBurned,
+                                    "totalEnergyBurnedUnit" to
+                                            "KILOCALORIE",
+                                    "totalSteps" to
+                                            if (totalSteps ==
+                                                0.0
+                                            )
+                                                null
+                                            else
+                                                totalSteps,
+                                    "totalStepsUnit" to
+                                            "COUNT",
+                                    "unit" to "MINUTES",
+                                    "date_from" to
+                                            rec.startTime
+                                                .toEpochMilli(),
+                                    "date_to" to
+                                            rec.endTime.toEpochMilli(),
+                                    "source_id" to "",
+                                    "source_name" to
+                                            record.metadata
+                                                .dataOrigin
+                                                .packageName,
+                                ),
+                            )
+                        }
+                        // Filter sleep stages for requested stage
+                    } else if (classType == SleepSessionRecord::class) {
+                        val filteredRecords = filterRecordsByRecordingMethods(
+                            recordingMethodsToFilter,
+                            response.records
+                        )
+
+                        for (rec in filteredRecords) {
+                            if (rec is SleepSessionRecord) {
+                                if (dataType == SLEEP_SESSION) {
+                                    healthConnectData.addAll(
+                                        convertRecord(
+                                            rec,
+                                            dataType
+                                        )
+                                    )
+                                } else {
+                                    for (recStage in rec.stages) {
+                                        if (dataType ==
+                                            mapSleepStageToType[
+                                                recStage.stage]
+                                        ) {
+                                            healthConnectData
+                                                .addAll(
+                                                    convertRecordStage(
+                                                        recStage,
+                                                        dataType,
+                                                        rec.metadata
+                                                    )
+                                                )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        val filteredRecords = filterRecordsByRecordingMethods(
+                            recordingMethodsToFilter,
+                            records
+                        )
+                        for (rec in filteredRecords) {
+                            healthConnectData.addAll(
+                                convertRecord(rec, dataType)
+                            )
+                        }
+                    }
+                }
+                Handler(context!!.mainLooper).run { result.success(healthConnectData) }
+            } catch (e: Exception) {
+                Log.i(
+                    "FLUTTER_HEALTH::ERROR",
+                    "Unable to return $dataType due to the following exception:"
+                )
+                Log.e("FLUTTER_HEALTH::ERROR", Log.getStackTraceString(e))
+                result.success(null)
+            }
+        }
+    }
+
 
     /** Get all datapoints of the DataType within the given time range */
     private fun getData(call: MethodCall, result: Result) {
@@ -704,9 +943,10 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
 
                     var response = healthConnectClient.readRecords(request)
                     var pageToken = response.pageToken
-
+                    val recordsNewData =
+                        response.records.filter { it.metadata.recordingMethod != RECORDING_METHOD_MANUAL_ENTRY }
                     // Add the records from the initial response to the records list
-                    records.addAll(response.records)
+                    records.addAll(recordsNewData)
 
                     // Continue making requests and fetching records while there is a
                     // page token
@@ -724,7 +964,10 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                         response = healthConnectClient.readRecords(request)
 
                         pageToken = response.pageToken
-                        records.addAll(response.records)
+                       val recordNewPageData =
+                           response.records.filter { it.metadata.recordingMethod != RECORDING_METHOD_MANUAL_ENTRY }
+
+                        records.addAll(recordNewPageData)
                     }
 
                     // Workout needs distance and total calories burned too
