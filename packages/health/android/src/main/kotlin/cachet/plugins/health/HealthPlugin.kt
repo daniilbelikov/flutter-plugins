@@ -151,7 +151,6 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
             "requestAuthorization" -> requestAuthorization(call, result)
             "revokePermissions" -> revokePermissions(call, result)
             "getData" -> getData(call, result)
-            "getAggregateData" -> getData(call, result)
             "getIntervalData" -> getIntervalData(call, result)
             "writeData" -> writeData(call, result)
             "delete" -> deleteData(call, result)
