@@ -135,7 +135,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
     ) {
         handler?.post { mResult?.error(errorCode, errorMessage, errorDetails) }
     }
-    
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
         return false
     }
@@ -225,9 +225,9 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
         } else {
             mResult?.success(true)
             Log.i("FLUTTER_HEALTH", "${permissionGranted.size} Health Connect permissions were granted!")
-            
+
             // log the permissions granted for debugging
-            Log.i("FLUTTER_HEALTH", "Permissions granted: $permissionGranted") 
+            Log.i("FLUTTER_HEALTH", "Permissions granted: $permissionGranted")
         }
     }
 
@@ -458,13 +458,13 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                     )
                 val response = healthConnectClient.readRecords(request)
                 val filteredRecords = filterRecordsByRecordingMethods(
-                     recordingMethodsToFilter,
+                    recordingMethodsToFilter,
                     response.records
                 )
                 val totalSteps = filteredRecords.sumOf { (it as StepsRecord).count.toInt() }
                 Log.i(
-                     "FLUTTER_HEALTH::SUCCESS",
-                     "returning $totalSteps steps (excluding manual entries)"
+                    "FLUTTER_HEALTH::SUCCESS",
+                    "returning $totalSteps steps (excluding manual entries)"
                 )
                 result.success(totalSteps)
             } catch (e: Exception) {
@@ -488,7 +488,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
         }
         result.success(healthConnectStatus)
     }
-    
+
     /** Filter records by recording methods */
     private fun filterRecordsByRecordingMethods(
         recordingMethodsToFilter: List<Int>,
@@ -704,9 +704,14 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
 
                     var response = healthConnectClient.readRecords(request)
                     var pageToken = response.pageToken
-
-                    // Add the records from the initial response to the records list
-                    records.addAll(response.records)
+                    val filtered = response.records.filter {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            it.metadata.recordingMethod != RECORDING_METHOD_MANUAL_ENTRY
+                        } else {
+                            true
+                        }
+                    }     // Add the records from the initial response to the records list
+                    records.addAll(filtered)
 
                     // Continue making requests and fetching records while there is a
                     // page token
@@ -724,7 +729,14 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                         response = healthConnectClient.readRecords(request)
 
                         pageToken = response.pageToken
-                        records.addAll(response.records)
+                        val filtered = response.records.filter {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                it.metadata.recordingMethod != RECORDING_METHOD_MANUAL_ENTRY
+                            } else {
+                                true
+                            }
+                        }
+                        records.addAll(filtered)
                     }
 
                     // Workout needs distance and total calories burned too
@@ -787,8 +799,17 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                         ),
                                     ),
                                 )
+
+
                             var totalSteps = 0.0
-                            for (stepRec in stepRequest.records) {
+                            val filtered = stepRequest.records.filter {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                    it.metadata.recordingMethod != RECORDING_METHOD_MANUAL_ENTRY
+                                } else {
+                                    true
+                                }
+                            }
+                            for (stepRec in filtered) {
                                 totalSteps += stepRec.count
                             }
 
@@ -906,6 +927,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
             }
         }
     }
+
 
     private fun convertRecordStage(
         stage: SleepSessionRecord.Stage,
@@ -1028,7 +1050,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1051,7 +1073,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1074,7 +1096,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1095,7 +1117,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1118,7 +1140,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1136,7 +1158,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     )
                 }
 
@@ -1158,7 +1180,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1181,7 +1203,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1204,7 +1226,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1233,7 +1255,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1256,7 +1278,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1279,7 +1301,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1302,7 +1324,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1325,7 +1347,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1348,7 +1370,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1371,7 +1393,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1397,7 +1419,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     ),
                 )
 
@@ -1419,7 +1441,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     )
                 )
 
@@ -1440,7 +1462,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     )
                 )
 
@@ -1461,7 +1483,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     )
                 )
 
@@ -1527,7 +1549,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     )
                 )
 
@@ -1543,7 +1565,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                        metadata.recordingMethod
+                                metadata.recordingMethod
                     )
                 )
             // is ExerciseSessionRecord -> return listOf(mapOf<String, Any>("value" to ,
@@ -2225,9 +2247,9 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                         endZoneOffset = null,
                         exerciseType = workoutType,
                         title = title,
-                            metadata = Metadata(
-                                recordingMethod = recordingMethod,
-                            ),
+                        metadata = Metadata(
+                            recordingMethod = recordingMethod,
+                        ),
                     ),
                 )
                 if (totalDistance != null) {
