@@ -3,9 +3,7 @@ package cachet.plugins.health
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.health.connect.datatypes.Metadata.RECORDING_METHOD_MANUAL_ENTRY
 import android.net.Uri
-import android.os.Build
 import android.os.Handler
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -137,7 +135,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
     ) {
         handler?.post { mResult?.error(errorCode, errorMessage, errorDetails) }
     }
-
+    
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
         return false
     }
@@ -223,19 +221,13 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
     private fun onHealthConnectPermissionCallback(permissionGranted: Set<String>) {
         if (permissionGranted.isEmpty()) {
             mResult?.success(false)
-            Log.i(
-                "FLUTTER_HEALTH",
-                "Health Connect permissions were not granted! Make sure to declare the required permissions in the AndroidManifest.xml file."
-            )
+            Log.i("FLUTTER_HEALTH", "Health Connect permissions were not granted! Make sure to declare the required permissions in the AndroidManifest.xml file.")
         } else {
             mResult?.success(true)
-            Log.i(
-                "FLUTTER_HEALTH",
-                "${permissionGranted.size} Health Connect permissions were granted!"
-            )
-
+            Log.i("FLUTTER_HEALTH", "${permissionGranted.size} Health Connect permissions were granted!")
+            
             // log the permissions granted for debugging
-            Log.i("FLUTTER_HEALTH", "Permissions granted: $permissionGranted")
+            Log.i("FLUTTER_HEALTH", "Permissions granted: $permissionGranted") 
         }
     }
 
@@ -452,12 +444,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
     }
 
     /** get the step records manually and filter out manual entries **/
-    private fun getStepCountFiltered(
-        start: Long,
-        end: Long,
-        recordingMethodsToFilter: List<Int>,
-        result: Result
-    ) {
+    private fun getStepCountFiltered(start: Long, end: Long, recordingMethodsToFilter: List<Int>, result: Result) {
         scope.launch {
             try {
                 val request =
@@ -471,13 +458,13 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                     )
                 val response = healthConnectClient.readRecords(request)
                 val filteredRecords = filterRecordsByRecordingMethods(
-                    recordingMethodsToFilter,
+                     recordingMethodsToFilter,
                     response.records
                 )
                 val totalSteps = filteredRecords.sumOf { (it as StepsRecord).count.toInt() }
                 Log.i(
-                    "FLUTTER_HEALTH::SUCCESS",
-                    "returning $totalSteps steps (excluding manual entries)"
+                     "FLUTTER_HEALTH::SUCCESS",
+                     "returning $totalSteps steps (excluding manual entries)"
                 )
                 result.success(totalSteps)
             } catch (e: Exception) {
@@ -501,7 +488,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
         }
         result.success(healthConnectStatus)
     }
-
+    
     /** Filter records by recording methods */
     private fun filterRecordsByRecordingMethods(
         recordingMethodsToFilter: List<Int>,
@@ -514,11 +501,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
         return records.filter { record ->
             Log.i(
                 "FLUTTER_HEALTH",
-                "Filtering record with recording method ${record.metadata.recordingMethod}, filtering by $recordingMethodsToFilter. Result: ${
-                    recordingMethodsToFilter.contains(
-                        record.metadata.recordingMethod
-                    )
-                }"
+                "Filtering record with recording method ${record.metadata.recordingMethod}, filtering by $recordingMethodsToFilter. Result: ${recordingMethodsToFilter.contains(record.metadata.recordingMethod)}"
             )
             return@filter !recordingMethodsToFilter.contains(record.metadata.recordingMethod)
         }
@@ -686,7 +669,8 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
         healthConnectRequestPermissionsLauncher!!.launch(permList.toSet())
     }
 
-    private fun getAggregateData(call: MethodCall, result: Result) {
+    /** Get all datapoints of the DataType within the given time range */
+    private fun getData(call: MethodCall, result: Result) {
         val dataType = call.argument<String>("dataTypeKey")!!
         val startTime = Instant.ofEpochMilli(call.argument<Long>("startTime")!!)
         val endTime = Instant.ofEpochMilli(call.argument<Long>("endTime")!!)
@@ -718,7 +702,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                             ),
                         )
 
-                    var response = healthConnectClient.read(request)
+                    var response = healthConnectClient.readRecords(request)
                     var pageToken = response.pageToken
 
                     // Add the records from the initial response to the records list
@@ -805,266 +789,6 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 )
                             var totalSteps = 0.0
                             for (stepRec in stepRequest.records) {
-                                totalSteps += stepRec.count
-                            }
-
-                            // val metadata = (rec as Record).metadata
-                            // Add final datapoint
-                            healthConnectData.add(
-                                // mapOf(
-                                mapOf<String, Any?>(
-                                    "uuid" to record.metadata.id,
-                                    "workoutActivityType" to
-                                            (workoutTypeMap
-                                                .filterValues {
-                                                    it ==
-                                                            record.exerciseType
-                                                }
-                                                .keys
-                                                .firstOrNull()
-                                                ?: "OTHER"),
-                                    "totalDistance" to
-                                            if (totalDistance ==
-                                                0.0
-                                            )
-                                                null
-                                            else
-                                                totalDistance,
-                                    "totalDistanceUnit" to
-                                            "METER",
-                                    "totalEnergyBurned" to
-                                            if (totalEnergyBurned ==
-                                                0.0
-                                            )
-                                                null
-                                            else
-                                                totalEnergyBurned,
-                                    "totalEnergyBurnedUnit" to
-                                            "KILOCALORIE",
-                                    "totalSteps" to
-                                            if (totalSteps ==
-                                                0.0
-                                            )
-                                                null
-                                            else
-                                                totalSteps,
-                                    "totalStepsUnit" to
-                                            "COUNT",
-                                    "unit" to "MINUTES",
-                                    "date_from" to
-                                            rec.startTime
-                                                .toEpochMilli(),
-                                    "date_to" to
-                                            rec.endTime.toEpochMilli(),
-                                    "source_id" to "",
-                                    "source_name" to
-                                            record.metadata
-                                                .dataOrigin
-                                                .packageName,
-                                ),
-                            )
-                        }
-                        // Filter sleep stages for requested stage
-                    } else if (classType == SleepSessionRecord::class) {
-                        val filteredRecords = filterRecordsByRecordingMethods(
-                            recordingMethodsToFilter,
-                            response.records
-                        )
-
-                        for (rec in filteredRecords) {
-                            if (rec is SleepSessionRecord) {
-                                if (dataType == SLEEP_SESSION) {
-                                    healthConnectData.addAll(
-                                        convertRecord(
-                                            rec,
-                                            dataType
-                                        )
-                                    )
-                                } else {
-                                    for (recStage in rec.stages) {
-                                        if (dataType ==
-                                            mapSleepStageToType[
-                                                recStage.stage]
-                                        ) {
-                                            healthConnectData
-                                                .addAll(
-                                                    convertRecordStage(
-                                                        recStage,
-                                                        dataType,
-                                                        rec.metadata
-                                                    )
-                                                )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        val filteredRecords = filterRecordsByRecordingMethods(
-                            recordingMethodsToFilter,
-                            records
-                        )
-                        for (rec in filteredRecords) {
-                            healthConnectData.addAll(
-                                convertRecord(rec, dataType)
-                            )
-                        }
-                    }
-                }
-                Handler(context!!.mainLooper).run { result.success(healthConnectData) }
-            } catch (e: Exception) {
-                Log.i(
-                    "FLUTTER_HEALTH::ERROR",
-                    "Unable to return $dataType due to the following exception:"
-                )
-                Log.e("FLUTTER_HEALTH::ERROR", Log.getStackTraceString(e))
-                result.success(null)
-            }
-        }
-    }
-
-
-    /** Get all datapoints of the DataType within the given time range */
-    private fun getData(call: MethodCall, result: Result) {
-        val dataType = call.argument<String>("dataTypeKey")!!
-        val startTime = Instant.ofEpochMilli(call.argument<Long>("startTime")!!)
-        val endTime = Instant.ofEpochMilli(call.argument<Long>("endTime")!!)
-        val healthConnectData = mutableListOf<Map<String, Any?>>()
-        val recordingMethodsToFilter = call.argument<List<Int>>("recordingMethodsToFilter")!!
-
-        Log.i(
-            "FLUTTER_HEALTH",
-            "Getting data for $dataType between $startTime and $endTime, filtering by $recordingMethodsToFilter"
-        )
-
-        scope.launch {
-            try {
-                mapToType[dataType]?.let { classType ->
-                    val records = mutableListOf<Record>()
-
-                    // Set up the initial request to read health records with specified
-                    // parameters
-                    var request =
-                        ReadRecordsRequest(
-                            recordType = classType,
-                            // Define the maximum amount of data
-                            // that HealthConnect can return
-                            // in a single request
-                            timeRangeFilter =
-                            TimeRangeFilter.between(
-                                startTime,
-                                endTime
-                            ),
-                        )
-
-                    var response = healthConnectClient.readRecords(request)
-                    var pageToken = response.pageToken
-                    val filtered = response.records.filter {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            it.metadata.recordingMethod != RECORDING_METHOD_MANUAL_ENTRY
-                        } else {
-                            true
-                        }
-                    }     // Add the records from the initial response to the records list
-                    records.addAll(filtered)
-
-                    // Continue making requests and fetching records while there is a
-                    // page token
-                    while (!pageToken.isNullOrEmpty()) {
-                        request =
-                            ReadRecordsRequest(
-                                recordType = classType,
-                                timeRangeFilter =
-                                TimeRangeFilter.between(
-                                    startTime,
-                                    endTime
-                                ),
-                                pageToken = pageToken
-                            )
-                        response = healthConnectClient.readRecords(request)
-
-                        pageToken = response.pageToken
-                        val filtered = response.records.filter {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                it.metadata.recordingMethod != RECORDING_METHOD_MANUAL_ENTRY
-                            } else {
-                                true
-                            }
-                        }
-                        records.addAll(filtered)
-                    }
-
-                    // Workout needs distance and total calories burned too
-                    if (dataType == WORKOUT) {
-                        var filteredRecords = filterRecordsByRecordingMethods(
-                            recordingMethodsToFilter,
-                            records
-                        )
-
-                        for (rec in filteredRecords) {
-                            val record = rec as ExerciseSessionRecord
-                            val distanceRequest =
-                                healthConnectClient.readRecords(
-                                    ReadRecordsRequest(
-                                        recordType =
-                                        DistanceRecord::class,
-                                        timeRangeFilter =
-                                        TimeRangeFilter.between(
-                                            record.startTime,
-                                            record.endTime,
-                                        ),
-                                    ),
-                                )
-                            var totalDistance = 0.0
-                            for (distanceRec in distanceRequest.records) {
-                                totalDistance +=
-                                    distanceRec.distance
-                                        .inMeters
-                            }
-
-                            val energyBurnedRequest =
-                                healthConnectClient.readRecords(
-                                    ReadRecordsRequest(
-                                        recordType =
-                                        TotalCaloriesBurnedRecord::class,
-                                        timeRangeFilter =
-                                        TimeRangeFilter.between(
-                                            record.startTime,
-                                            record.endTime,
-                                        ),
-                                    ),
-                                )
-                            var totalEnergyBurned = 0.0
-                            for (energyBurnedRec in
-                            energyBurnedRequest.records) {
-                                totalEnergyBurned +=
-                                    energyBurnedRec.energy
-                                        .inKilocalories
-                            }
-
-                            val stepRequest =
-                                healthConnectClient.readRecords(
-                                    ReadRecordsRequest(
-                                        recordType =
-                                        StepsRecord::class,
-                                        timeRangeFilter =
-                                        TimeRangeFilter.between(
-                                            record.startTime,
-                                            record.endTime
-                                        ),
-                                    ),
-                                )
-
-
-                            var totalSteps = 0.0
-                            val filtered = stepRequest.records.filter {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                    it.metadata.recordingMethod != RECORDING_METHOD_MANUAL_ENTRY
-                                } else {
-                                    true
-                                }
-                            }
-                            for (stepRec in filtered) {
                                 totalSteps += stepRec.count
                             }
 
@@ -1304,7 +1028,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1327,7 +1051,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1350,7 +1074,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1371,7 +1095,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1394,7 +1118,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1412,7 +1136,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     )
                 }
 
@@ -1434,7 +1158,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1457,7 +1181,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1480,7 +1204,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1509,7 +1233,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1532,7 +1256,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1555,7 +1279,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1578,7 +1302,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1601,7 +1325,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1624,7 +1348,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1647,7 +1371,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1673,7 +1397,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     ),
                 )
 
@@ -1695,7 +1419,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     )
                 )
 
@@ -1716,7 +1440,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     )
                 )
 
@@ -1737,7 +1461,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     )
                 )
 
@@ -1803,7 +1527,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     )
                 )
 
@@ -1819,7 +1543,7 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 metadata.dataOrigin
                                     .packageName,
                         "recording_method" to
-                                metadata.recordingMethod
+                                        metadata.recordingMethod
                     )
                 )
             // is ExerciseSessionRecord -> return listOf(mapOf<String, Any>("value" to ,
@@ -2328,7 +2052,6 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                                 )
                         ),
                     )
-
                 SLEEP_SESSION ->
                     SleepSessionRecord(
                         startTime =
@@ -2502,9 +2225,9 @@ class HealthPlugin(private var channel: MethodChannel? = null) :
                         endZoneOffset = null,
                         exerciseType = workoutType,
                         title = title,
-                        metadata = Metadata(
-                            recordingMethod = recordingMethod,
-                        ),
+                            metadata = Metadata(
+                                recordingMethod = recordingMethod,
+                            ),
                     ),
                 )
                 if (totalDistance != null) {
